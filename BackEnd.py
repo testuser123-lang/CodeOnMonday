@@ -1,93 +1,243 @@
-import pandas as pd
-import geopandas as gpd
+import sys
 import folium
-from shapely.geometry import Point, LineString
-from IPython.display import display, clear_output
-import time
-import os
+import pandas as pd
+from PyQt5 import QtWidgets, QtCore, QtWebEngineWidgets
 
 
-for filename in os.listdir(os.getcwd()):
-    if filename.endswith(".csv"):
-        file_name = filename
-        df = pd.read_csv(filename, delimiter=',', header=None,
-                 names=['Time', 'Flight', 'Latitude', 'Longitude', 'Altitude', 'Flight Type', 'Depart', 'Arrival'])
+def create_folium_map():
+    # Create a map centered around Japan
+    japan_center = [36.2048, 138.2529]
+    flight_map = folium.Map(
+        location=japan_center, zoom_start=5, tiles="Cartodb dark_matter"
+    )
 
-date_str = file_name[3:11] # Extracts '20210313'
-
-# Convert the extracted string to the desired date format '13-03-2021'
-formatted_date = pd.to_datetime(date_str, format='%Y%m%d').strftime('%d-%m-%Y')
-df['Time'] = pd.to_datetime(df['Time'])
-geometry = [Point(lon, lat) for lon, lat in zip(df['Longitude'], df['Latitude'])]
-df.sort_values(by=["Flight","Flight Type","Depart","Arrival"],ascending=True)
-gdf = gpd.GeoDataFrame(df, geometry=geometry)
-gdf[:30]
-unique_flights = df["Flight"].unique().tolist()
+    return flight_map
 
 
-time_interval = 1
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
 
-# Create a map centered around Japan
-japan_center = [36.2048, 138.2529]
-flight_map = folium.Map(location=japan_center, zoom_start=5, tiles='Cartodb dark_matter')
+        self.setWindowTitle("Plot Tracker")
+        self.setGeometry(100, 100, 800, 600)
 
-# Define a list of colors for different flights
-line_colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown']
+        central_widget = QtWidgets.QWidget()
+        self.setCentralWidget(central_widget)
 
-# Create a time counter DivIcon
-time_counter_div = folium.DivIcon(html="<div id='time_counter'>Time Counter: </div>", icon_size=(200,40))
+        layout = QtWidgets.QHBoxLayout(central_widget)
 
-# Add the time counter DivIcon to the map using a Marker
-folium.Marker(
-    location=(35, 135), # Adjust the location for the time counter
-    icon=time_counter_div
-).add_to(flight_map)
+        # Left canvas
+        self.canvas_left = QtWidgets.QFrame()
+        self.canvas_left.setStyleSheet("background-color: blue;")
 
-# Iterate through time intervals
-for time_index in range(0, len(gdf), time_interval):
-    clear_output(wait=True) # Clear the previous output
+        layout.addWidget(self.canvas_left)
+        left_layout = QtWidgets.QVBoxLayout(self.canvas_left)
 
-    # Create a new map
-    flight_map = folium.Map(location=japan_center, zoom_start=5, tiles='Cartodb dark_matter')
+        # Right canvas
+        self.canvas_right = QtWidgets.QFrame()
+        self.canvas_right.setStyleSheet("background-color: #F0F0F0;")
+        self.canvas_right.setMaximumWidth(200)  # Decrease width
+        self.canvas_right.setMinimumHeight(200)  # Decrease height
+        layout.addWidget(self.canvas_right)
 
-    # Add lines to connect the points in the trajectory
-    for i, flight_id in enumerate(unique_flights):
-        subset_gdf = gdf.loc[gdf["Flight"] == flight_id].iloc[:time_index + 1]
+        right_layout = QtWidgets.QVBoxLayout(self.canvas_right)
 
-        # Extract Point geometries from the 'geometry' column
-        points = [(point.y, point.x) for point in subset_gdf['geometry']]
+        # Flight Tracker App label
+        label1 = QtWidgets.QLabel("Flight Tracker App")
+        label1.setStyleSheet("font: bold 12px;")
+        right_layout.addWidget(label1, alignment=QtCore.Qt.AlignHCenter)
 
-        # Add dotted lines to connect consecutive points
-        if len(points) > 1:
-            dotted_line = folium.PolyLine(locations=points, color=line_colors[i % len(line_colors)],
-                                         weight=2, opacity=0.8, dash_array='5, 5').add_to(flight_map)
+        # Open button
+        button1 = QtWidgets.QPushButton("Open")
+        button1.clicked.connect(self.open_action)
+        right_layout.addWidget(button1)
 
-        # Add the latest point as a marker
-        latest_point = subset_gdf.iloc[-1]
-        lat, lon = latest_point['geometry'].y, latest_point['geometry'].x
+        # Exit button
+        button2 = QtWidgets.QPushButton("Exit")
+        button2.clicked.connect(self.exit_action)
+        right_layout.addWidget(button2)
 
-        # Details for the tooltip
-        tooltip_text = f"<strong>Flight:</strong> {latest_point['Flight']}<br>" \
-                   f"<strong>Flight Type:</strong> {latest_point['Flight Type']}<br>" \
-                   f"<strong>Depart:</strong> {latest_point['Depart']}<br>" \
-                   f"<strong>Arrival:</strong> {latest_point['Arrival']}<br>" \
-                   f"<strong>Latitude:</strong> {latest_point['Latitude']}<br>" \
-                   f"<strong>Longitude:</strong> {latest_point['Longitude']}"
+        # Start button
+        button3 = QtWidgets.QPushButton("Start")
+        right_layout.addWidget(button3)
 
-        folium.CircleMarker(
-            location=(lat, lon),
-            radius=5,
-            color='white',
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
-            fill_color=line_colors[i % len(line_colors)],
-            fill_opacity=0.5,
-        ).add_to(flight_map)
+        # Stop button
+        button4 = QtWidgets.QPushButton("Stop")
+        right_layout.addWidget(button4)
 
-    # Update the time counter
-    time_counter_div.options['html'] = "<div id='time_counter'>Time Counter: " + gdf.iloc[time_index]['Time'].strftime('%H:%M:%S.S') + "</div>"
+        # Time data list
+        time_data = [
+            "00:30",
+            "01:00",
+            "01:30",
+            "02:00",
+            "02:30",
+            "03:00",
+            "03:30",
+            "04:00",
+            "04:30",
+            "05:00",
+            "05:30",
+            "06:00",
+            "06:30",
+            "07:00",
+            "07:30",
+            "08:00",
+            "08:30",
+            "09:00",
+            "09:30",
+            "10:00",
+            "10:30",
+            "11:00",
+            "11:30",
+            "12:00",
+            "12:30",
+            "13:00",
+            "13:30",
+            "14:00",
+            "14:30",
+            "15:00",
+            "15:30",
+            "16:00",
+            "16:30",
+            "17:00",
+            "17:30",
+            "18:00",
+            "18:30",
+            "19:00",
+            "19:30",
+            "20:00",
+            "20:30",
+            "21:00",
+            "21:30",
+            "22:00",
+            "22:30",
+            "23:00",
+            "23:30",
+        ]
 
-    # Display the updated map
-    print(display(flight_map))
+        # List box
+        listbox = QtWidgets.QTreeWidget()
+        listbox.setHeaderLabels(["Time"])
+        for time in time_data:
+            item = QtWidgets.QTreeWidgetItem([time])
+            listbox.addTopLevelItem(item)
+        right_layout.addWidget(listbox)
 
-    # Pause for the specified time interval
-    time.sleep(time_interval)
+        # Insert spacing
+        right_layout.addSpacing(20)
+
+        # Radio buttons for Mode
+        label_mode = QtWidgets.QLabel("Mode")
+        right_layout.addWidget(label_mode)
+
+        mode_button_group = QtWidgets.QButtonGroup()
+        for text, value in [("Dynamic", "Dynamic"), ("Static", "Static")]:
+            radio = QtWidgets.QRadioButton(text)
+            radio.setChecked(value == "Dynamic")
+            right_layout.addWidget(radio)
+            mode_button_group.addButton(radio)
+
+        # Integrate Folium map widget to the left_layout
+        self.flight_map = create_folium_map()
+        self.web_engine_view = QtWebEngineWidgets.QWebEngineView()
+        self.web_engine_view.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
+
+        # Add the widget to the layout and set stretch factors
+        left_layout.addWidget(self.web_engine_view, stretch=1)
+        # Set alignment to fill the available space
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setAlignment(QtCore.Qt.AlignTop)
+
+    def open_action(self):
+        file_paths, _ = QtWidgets.QFileDialog.getOpenFileNames()
+        print("Selected files:", file_paths)
+        for filename in file_paths:
+            if filename.endswith(".csv"):
+                df = pd.read_csv(
+                    filename,
+                    delimiter=",",
+                    header=None,
+                    names=[
+                        "Time",
+                        "Flight",
+                        "Latitude",
+                        "Longitude",
+                        "Altitude",
+                        "Flight Type",
+                        "Depart",
+                        "Arrival",
+                    ],
+                )
+                self.update_canvas_left(df)
+
+    def update_canvas_left(self, df):
+
+        # Add markers for flights
+        flights_data = [
+            {
+                "Time": "00:11:58.1",
+                "Flight": "JN00012",
+                "Latitude": 33.068832,
+                "Longitude": 128.953271,
+            },
+            {
+                "Time": "00:11:58.1",
+                "Flight": "JN00013",
+                "Latitude": 25.293022,
+                "Longitude": 127.561049,
+            },
+            {
+                "Time": "00:11:58.6",
+                "Flight": "JN00014",
+                "Latitude": 33.147860,
+                "Longitude": 129.221991,
+            },
+            {
+                "Time": "00:11:58.6",
+                "Flight": "JN00024",
+                "Latitude": 34.301537,
+                "Longitude": 133.520316,
+            },
+            {
+                "Time": "00:11:59.1",
+                "Flight": "JN00006",
+                "Latitude": 33.289685,
+                "Longitude": 130.328418,
+            },
+        ]
+
+        for flight in flights_data:
+            folium.Marker(
+                location=[flight["Latitude"], flight["Longitude"]],
+                popup=f"{flight['Flight']} - {flight['Time']}",
+                icon=folium.Icon(color="blue", icon="plane"),
+            ).add_to(self.flight_map)
+            # Details for the tooltip
+            tooltip_text = (
+                f"<strong>Flight:</strong> {flight['Flight']}<br>"
+                f"<strong>Latitude:</strong> {flight['Latitude']}<br>"
+                f"<strong>Longitude:</strong> {flight['Longitude']}"
+            )
+
+            folium.CircleMarker(
+                location=[flight["Latitude"], flight["Longitude"]],
+                radius=5,
+                color="white",
+                tooltip=folium.Tooltip(tooltip_text, sticky=True),
+                fill_opacity=0.5,
+            ).add_to(self.flight_map)
+
+        self.web_engine_view.setHtml(self.flight_map._repr_html_())
+
+    def exit_action(self):
+        QtWidgets.qApp.quit()
+
+
+if __name__ == "__main__":
+    app = QtWidgets.QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
