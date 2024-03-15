@@ -1,17 +1,7 @@
 import sys
-import folium
-import pandas as pd
+from temp_wrk import ScreenMapping
 from PyQt5 import QtWidgets, QtCore, QtWebEngineWidgets
-
-
-def create_folium_map():
-    # Create a map centered around Japan
-    japan_center = [36.2048, 138.2529]
-    flight_map = folium.Map(
-        location=japan_center, zoom_start=5, tiles="Cartodb dark_matter"
-    )
-
-    return flight_map
+from PyQt5 import QtGui
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -44,9 +34,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Flight Tracker App label
         label1 = QtWidgets.QLabel("Flight Tracker App")
-        label1.setStyleSheet("font: bold 12px;")
+        label1.setStyleSheet("font: bold 14px;")
         right_layout.addWidget(label1, alignment=QtCore.Qt.AlignHCenter)
-
+        # Logo image
+        logo_image = QtWidgets.QLabel()
+        logo_image.setPixmap(QtGui.QPixmap("ロゴマーク（カラー小）.jpg"))
+        right_layout.addWidget(logo_image, alignment=QtCore.Qt.AlignHCenter)
         # Open button
         button1 = QtWidgets.QPushButton("Open")
         button1.clicked.connect(self.open_action)
@@ -119,8 +112,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # List box
         listbox = QtWidgets.QTreeWidget()
         listbox.setHeaderLabels(["Time"])
-        for time in time_data:
-            item = QtWidgets.QTreeWidgetItem([time])
+        for time_item in time_data:
+            item = QtWidgets.QTreeWidgetItem([time_item])
             listbox.addTopLevelItem(item)
         right_layout.addWidget(listbox)
 
@@ -139,7 +132,6 @@ class MainWindow(QtWidgets.QMainWindow):
             mode_button_group.addButton(radio)
 
         # Integrate Folium map widget to the left_layout
-        self.flight_map = create_folium_map()
         self.web_engine_view = QtWebEngineWidgets.QWebEngineView()
         self.web_engine_view.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
@@ -153,84 +145,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def open_action(self):
         file_paths, _ = QtWidgets.QFileDialog.getOpenFileNames()
-        print("Selected files:", file_paths)
-        for filename in file_paths:
-            if filename.endswith(".csv"):
-                df = pd.read_csv(
-                    filename,
-                    delimiter=",",
-                    header=None,
-                    names=[
-                        "Time",
-                        "Flight",
-                        "Latitude",
-                        "Longitude",
-                        "Altitude",
-                        "Flight Type",
-                        "Depart",
-                        "Arrival",
-                    ],
-                )
-                self.update_canvas_left(df)
-
-    def update_canvas_left(self, df):
-
-        # Add markers for flights
-        flights_data = [
-            {
-                "Time": "00:11:58.1",
-                "Flight": "JN00012",
-                "Latitude": 33.068832,
-                "Longitude": 128.953271,
-            },
-            {
-                "Time": "00:11:58.1",
-                "Flight": "JN00013",
-                "Latitude": 25.293022,
-                "Longitude": 127.561049,
-            },
-            {
-                "Time": "00:11:58.6",
-                "Flight": "JN00014",
-                "Latitude": 33.147860,
-                "Longitude": 129.221991,
-            },
-            {
-                "Time": "00:11:58.6",
-                "Flight": "JN00024",
-                "Latitude": 34.301537,
-                "Longitude": 133.520316,
-            },
-            {
-                "Time": "00:11:59.1",
-                "Flight": "JN00006",
-                "Latitude": 33.289685,
-                "Longitude": 130.328418,
-            },
-        ]
-
-        for flight in flights_data:
-            folium.Marker(
-                location=[flight["Latitude"], flight["Longitude"]],
-                popup=f"{flight['Flight']} - {flight['Time']}",
-                icon=folium.Icon(color="blue", icon="plane"),
-            ).add_to(self.flight_map)
-            # Details for the tooltip
-            tooltip_text = (
-                f"<strong>Flight:</strong> {flight['Flight']}<br>"
-                f"<strong>Latitude:</strong> {flight['Latitude']}<br>"
-                f"<strong>Longitude:</strong> {flight['Longitude']}"
-            )
-
-            folium.CircleMarker(
-                location=[flight["Latitude"], flight["Longitude"]],
-                radius=5,
-                color="white",
-                tooltip=folium.Tooltip(tooltip_text, sticky=True),
-                fill_opacity=0.5,
-            ).add_to(self.flight_map)
-
-        self.web_engine_view.setHtml(self.flight_map._repr_html_())
+        ScreenMapping.print_map(file_paths, self.web_engine_view)
 
     def exit_action(self):
         QtWidgets.qApp.quit()
@@ -241,3 +156,4 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
+
