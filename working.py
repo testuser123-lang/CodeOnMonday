@@ -22,8 +22,8 @@ class ScreenMapping:
                 folium.PolyLine(
                     locations=points,
                     color=line_colors[i % len(line_colors)],
-                    weight=1,
-                    opacity=0.1,
+                    weight=0.5,
+                    opacity=0,
                     dash_array="5, 5",
                 ).add_to(flight_map)
 
@@ -181,6 +181,17 @@ class MainWindow(QtWidgets.QMainWindow):
             radio.setChecked(value == "Dynamic")
             right_layout.addWidget(radio)
             self.mode_button_group.addButton(radio)
+
+        # Radio buttons for Fast Forward
+        label_fast_forward = QtWidgets.QLabel("Fast Forward")
+        right_layout.addWidget(label_fast_forward)
+
+        self.fast_forward_button_group = QtWidgets.QButtonGroup()
+        for text, value in [("5x", 5), ("10x", 10), ("20x", 20), ("50x", 50)]:
+            radio = QtWidgets.QRadioButton(text)
+            radio.setChecked(value == 5)
+            right_layout.addWidget(radio)
+            self.fast_forward_button_group.addButton(radio)
 
         # Integrate Folium map widget to the left_layout
         self.web_engine_view = QtWebEngineWidgets.QWebEngineView()
